@@ -82,6 +82,8 @@ button { cursor: pointer; }
 .filter-btn { background: var(--fg); color: var(--bg); }
 .filter-btn .count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-fg); font-size: 11px; font-weight: 800; display: inline-grid; place-items: center; }
 
+.radio-row { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 14px 2px; font-size: 15px; font-weight: 600; text-align: left; }
+
 /* ---------- category picker ---------- */
 .picker-backdrop { position: fixed; inset: 0; z-index: 20; background: rgba(10, 12, 20, .45); display: flex; align-items: flex-end; justify-content: center; }
 .picker { background: var(--bg); width: 100%; max-width: 520px; max-height: 88%; border-radius: 20px 20px 0 0; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom, 0px); box-shadow: var(--shadow); }
@@ -230,10 +232,9 @@ button { cursor: pointer; }
 
 <header class="topbar" id="topbar">
   <div class="row1">
-    <div class="seg" role="group" aria-label="Город">
-      <button id="city-msk" aria-pressed="true">Мск</button>
-      <button id="city-spb" aria-pressed="false">СПб</button>
-    </div>
+    <button class="icon-btn" id="btn-settings" aria-label="Настройки">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+    </button>
     <label class="search">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input id="q" type="search" placeholder="Волейбол, керамика, квиз…" autocomplete="off">
@@ -316,7 +317,10 @@ const SUBS = {
   rafting: ['outdoor', 'Сплавы', '🚣'], trip: ['outdoor', 'Выезды за город', '🚐'],
 };
 const subsOf = cat => Object.keys(SUBS).filter(k => SUBS[k][0] === cat);
-const CITY = { msk: { center: [37.615, 55.752], zoom: 11 }, spb: { center: [30.315, 59.94], zoom: 11.3 } };
+const CITY = {
+  msk: { title: 'Москва', where: 'в Москве', center: [37.615, 55.752], zoom: 11 },
+  spb: { title: 'Санкт-Петербург', where: 'в Петербурге', center: [30.315, 59.94], zoom: 11.3 },
+};
 
 // ---------- организаторы (вымышленные) ----------
 const ORGS = {
@@ -443,7 +447,11 @@ const ICON = {
 };
 
 // ---------- состояние ----------
-const state = { city: 'msk', subs: new Set(), date: 'all', price: 'all', freeOnly: false, q: '', view: 'list', active: null, picking: false, draft: null };
+// Числа в фильтрах: до 99 — точно, дальше — округляем вниз («100+», «1 000+»)
+const fmtCount = n => n < 100 ? String(n) : n < 1000 ? `${Math.floor(n / 100) * 100}+` : `${Math.floor(n / 1000).toLocaleString('ru-RU')} 000+`;
+const fmtEvents = n => `${fmtCount(n)} ${plural(n < 100 ? n : 100, 'событие', 'события', 'событий')}`;
+
+const state = { city: CITY[store.get('city', 'msk')] ? store.get('city', 'msk') : 'msk', subs: new Set(), date: 'all', price: 'all', freeOnly: false, q: '', view: 'list', active: null, picking: false, draft: null };
 
 function matches(ev) {
   if (ev.city !== state.city) return false;
@@ -465,7 +473,7 @@ function matches(ev) {
 const map = new maplibregl.Map({
   container: 'map',
   style: 'https://tiles.openfreemap.org/styles/positron',
-  center: CITY.msk.center, zoom: CITY.msk.zoom,
+  center: CITY[state.city].center, zoom: CITY[state.city].zoom,
   attributionControl: { compact: true },
 });
 map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true } }), 'top-right');
@@ -549,19 +557,19 @@ function renderPicker() {
     const st = n === 0 ? '' : n === all.length ? 'on' : 'some';
     const open = expanded.has(ck) || (pickerQ && !catMatch);
     const total = all.reduce((s, k) => s + cnt(k), 0);
-    const note = n === all.length ? 'Все виды' : n ? `Выбрано ${n} из ${all.length}` : `${total} ${plural(total, 'событие', 'события', 'событий')}`;
+    const note = n === all.length ? 'Все виды' : n ? `Выбрано ${n} из ${all.length}` : fmtEvents(total);
     html += `<div class="cat-row" style="--c:${c.color}">
         <button class="cat-main" data-expand="${ck}" aria-expanded="${!!open}"><span class="cat-ico">${c.icon}</span><span><b>${c.name}</b><small>${note}</small></span><span class="chev">›</span></button>
         <button class="check ${st}" data-cat-toggle="${ck}" aria-label="Выбрать всю категорию «${c.name}»" aria-pressed="${st === 'on'}">${st === 'on' ? '✓' : st === 'some' ? '–' : ''}</button>
       </div>` +
       (open ? `<div class="sub-list">${shown.map(k => `<button class="sub-row" data-sub-toggle="${k}" aria-pressed="${draft.has(k)}">
-        <span>${SUBS[k][2]}</span><span>${SUBS[k][1]}</span><small>${cnt(k) || ''}</small><span class="check ${draft.has(k) ? 'on' : ''}">${draft.has(k) ? '✓' : ''}</span></button>`).join('')}</div>` : '');
+        <span>${SUBS[k][2]}</span><span>${SUBS[k][1]}</span><small>${cnt(k) ? fmtCount(cnt(k)) : ''}</small><span class="check ${draft.has(k) ? 'on' : ''}">${draft.has(k) ? '✓' : ''}</span></button>`).join('')}</div>` : '');
   }
   $('#picker-list').innerHTML = html || '<div class="empty"><b>Такого вида пока нет</b>Организатор может предложить новый вид через поддержку.</div>';
   const saved = state.subs; state.subs = draft;
   const total = EVENTS.filter(matches).length;
   state.subs = saved;
-  $('#picker-apply').textContent = total ? `Показать ${total} ${plural(total, 'событие', 'события', 'событий')}` : 'Ничего не найдено';
+  $('#picker-apply').textContent = total ? `Показать ${fmtEvents(total)}` : 'Ничего не найдено';
   $('#picker-apply').disabled = !total;
 }
 $('#picker-list').addEventListener('click', e => {
@@ -580,15 +588,30 @@ $('#picker').addEventListener('click', e => { if (e.target.id === 'picker') clos
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#picker').hidden) closePicker(); });
 $('#q').addEventListener('input', e => { state.q = e.target.value.trim().toLowerCase(); refresh(); });
 function setCity(c) {
-  state.city = c;
-  $('#city-msk').setAttribute('aria-pressed', c === 'msk');
-  $('#city-spb').setAttribute('aria-pressed', c === 'spb');
-  state.active = null; state.view = 'list';
+  state.city = c; store.set('city', c);
+  $('#q').placeholder = `Поиск ${CITY[c].where}`;
+  state.active = null;
   map.jumpTo({ center: CITY[c].center, zoom: CITY[c].zoom });
-  refresh();
+  updatePins();
 }
-$('#city-msk').onclick = () => setCity('msk');
-$('#city-spb').onclick = () => setCity('spb');
+$('#q').placeholder = `Поиск ${CITY[state.city].where}`;
+
+// ---------- настройки ----------
+function renderSettings() {
+  state.view = 'settings'; state.active = null; updatePins();
+  $('#view').innerHTML = `<button class="back" id="back-settings">‹ Все события</button>
+    <div class="list-head"><h2>Настройки</h2></div>
+    <div class="section-title">Город</div>
+    ${Object.entries(CITY).map(([k, c]) => `<button class="radio-row" data-city="${k}" aria-pressed="${state.city === k}">
+      <span>${c.title}</span><span class="check ${state.city === k ? 'on' : ''}">${state.city === k ? '✓' : ''}</span></button>`).join('')}
+    <p class="note">При первом входе город определяется по геопозиции. На карте и в списке — только события выбранного города.</p>`;
+}
+$('#btn-settings').onclick = () => { renderSettings(); if (!isDesktop()) setSheet('half'); };
+$('#view').addEventListener('click', e => {
+  const b = e.target.closest('[data-city]'); if (!b || state.view !== 'settings') return;
+  if (b.dataset.city !== state.city) { setCity(b.dataset.city); toast(`Город: ${CITY[state.city].title}`); }
+  renderSettings();
+});
 
 function syncTopbarHeight() { document.documentElement.style.setProperty('--topbar-h', $('#topbar').offsetHeight + 'px'); }
 new ResizeObserver(syncTopbarHeight).observe($('#topbar'));
@@ -853,7 +876,7 @@ function finishCreate(lngLat) {
 }
 $('#pick-cancel').onclick = () => { state.picking = false; state.draft = null; $('#pick-banner').hidden = true; renderList(); };
 ORGS.me.tg = store.get('me-tg', '');
-$('#view').addEventListener('click', e => { if (e.target.closest('#back-mine, #back-create')) { state.view = 'list'; renderList(); } });
+$('#view').addEventListener('click', e => { if (e.target.closest('#back-mine, #back-create, #back-settings')) { state.view = 'list'; renderList(); } });
 
 // ---------- запуск ----------
 function refresh() {
