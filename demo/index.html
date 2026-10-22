@@ -598,8 +598,8 @@ $('#q').placeholder = `Поиск ${CITY[state.city].where}`;
 
 // ---------- настройки ----------
 const SETTINGS_ROWS = [
-  ['history', 'История посещений'], ['questions', 'Мои вопросы'], ['organizer', 'Я организатор'],
-  ['notifications', 'Уведомления'], ['support', 'Поддержка'], ['docs', 'Документы'], ['logout', 'Выйти'],
+  ['history', 'Мои записи'], ['history', 'История'], ['questions', 'Мои вопросы'], ['organizer', 'Я организатор'],
+  ['notifications', 'Уведомления'], ['support', 'Поддержка'], ['user', 'Пользовательские настройки'], ['docs', 'Документы'],
 ];
 function renderSettings() {
   state.view = 'settings'; state.active = null; updatePins();
@@ -614,14 +614,31 @@ function renderSettings() {
       <span>${c.title}</span><span class="check ${state.city === k ? 'on' : ''}">${state.city === k ? '✓' : ''}</span></button>`).join('')}
     <p class="note">При первом входе город определяется по геопозиции. На карте и в списке — только события выбранного города.</p>
     <div class="section-title">Аккаунт</div>
-    ${SETTINGS_ROWS.map(([k, t]) => `<button class="radio-row" data-setting="${k}"><span>${t}</span><span class="muted">›</span></button>`).join('')}
-    <button class="radio-row" data-setting="delete" style="color:var(--warn)"><span>Удалить аккаунт</span></button>`;
+    ${SETTINGS_ROWS.map(([k, t]) => `<button class="radio-row" data-setting="${k}"><span>${t}</span><span class="muted">›</span></button>`).join('')}`;
 }
-$('#btn-settings').onclick = () => { renderSettings(); if (!isDesktop()) setSheet('half'); };
+const privacy = store.get('privacy', { hideSurname: false, hideHistory: false });
+function renderUserSettings() {
+  const row = (k, title, hint) => `<button class="radio-row" data-privacy="${k}" aria-pressed="${privacy[k]}">
+    <span>${title}<br><small class="muted" style="font-weight:500">${hint}</small></span><span class="check ${privacy[k] ? 'on' : ''}">${privacy[k] ? '✓' : ''}</span></button>`;
+  $('#view').innerHTML = `<button class="back" id="back-user">‹ Настройки</button>
+    <div class="list-head"><h2>Пользовательские настройки</h2></div>
+    <div class="section-title">Приватность</div>
+    ${row('hideSurname', 'Скрыть фамилию', 'Организаторы ваших событий всё равно видят имя и фамилию')}
+    ${row('hideHistory', 'Скрыть историю посещений', 'Другие пользователи не увидят, где вы были')}
+    <p class="note">Как вас видят другие: <b>Ваше имя${privacy.hideSurname ? '' : ' Фамилия'}</b></p>
+    <div class="section-title">Аккаунт</div>
+    <button class="radio-row" data-account="logout"><span>Выйти</span></button>
+    <button class="radio-row" data-account="delete" style="color:var(--warn)"><span>Удалить аккаунт</span></button>`;
+}
+$('#btn-settings').onclick =() => { renderSettings(); if (!isDesktop()) setSheet('half'); };
 $('#view').addEventListener('click', e => {
   if (state.view !== 'settings') return;
   const s = e.target.closest('[data-setting]');
-  if (s) return s.dataset.setting === 'history' ? renderMine() : toast('В демо этот раздел пока не работает');
+  if (s) return s.dataset.setting === 'history' ? renderMine() : s.dataset.setting === 'user' ? renderUserSettings() : toast('В демо этот раздел пока не работает');
+  if (e.target.closest('#back-user')) return renderSettings();
+  const t = e.target.closest('[data-privacy]');
+  if (t) { privacy[t.dataset.privacy] = !privacy[t.dataset.privacy]; store.set('privacy', privacy); return renderUserSettings(); }
+  if (e.target.closest('[data-account]')) return toast('В демо это действие не выполняется');
   const b = e.target.closest('[data-city]'); if (!b) return;
   if (b.dataset.city !== state.city) { setCity(b.dataset.city); toast(`Город: ${CITY[state.city].title}`); }
   renderSettings();
