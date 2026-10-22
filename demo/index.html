@@ -78,6 +78,34 @@ button { cursor: pointer; }
 .chips.flat .chip { box-shadow: none; background: var(--surface); }
 .chips.flat .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
 
+.chip .x { margin-left: 2px; opacity: .75; font-size: 11px; }
+.filter-btn { background: var(--fg); color: var(--bg); }
+.filter-btn .count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-fg); font-size: 11px; font-weight: 800; display: inline-grid; place-items: center; }
+
+/* ---------- category picker ---------- */
+.picker-backdrop { position: fixed; inset: 0; z-index: 20; background: rgba(10, 12, 20, .45); display: flex; align-items: flex-end; justify-content: center; }
+.picker { background: var(--bg); width: 100%; max-width: 520px; max-height: 88%; border-radius: 20px 20px 0 0; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom, 0px); box-shadow: var(--shadow); }
+.picker-head { display: flex; justify-content: space-between; align-items: center; padding: 16px max(16px, env(safe-area-inset-left, 0px)) 8px; }
+.picker-head h2 { font: 700 17px/1.2 var(--display); margin: 0; }
+.picker .search { margin: 0 16px 8px; box-shadow: none; background: var(--surface); flex: none; }
+.picker-list { overflow-y: auto; flex: 1; min-height: 0; padding: 0 8px 8px; overscroll-behavior: contain; }
+.cat-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 0; border-radius: 12px; }
+.cat-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; border: 0; background: none; text-align: left; padding: 6px 8px; border-radius: 12px; }
+.cat-main:hover { background: var(--surface); }
+.cat-main b { display: block; font-size: 15px; }
+.cat-main small, .sub-row small { color: var(--muted); font-size: 12.5px; }
+.cat-ico { width: 44px; height: 44px; border-radius: 12px; background: var(--c); display: grid; place-items: center; font-size: 22px; }
+.chev { color: var(--muted); font-size: 22px; line-height: 1; transition: transform .15s; }
+.cat-main[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.check { flex: none; width: 24px; height: 24px; border-radius: 7px; border: 2px solid var(--line); background: var(--bg); display: grid; place-items: center; font-size: 14px; font-weight: 800; color: var(--accent-fg); padding: 0; }
+.check.on, .check.some { background: var(--accent); border-color: var(--accent); }
+.sub-list { padding: 2px 0 8px; }
+.sub-row { width: 100%; display: grid; grid-template-columns: 28px 1fr auto 24px; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: 9px 8px 9px 64px; border-radius: 10px; font-size: 14.5px; }
+.sub-row:hover { background: var(--surface); }
+.picker-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.picker-foot .primary { flex: 1; }
+@media (min-width: 900px) { .picker-backdrop { align-items: center; } .picker { border-radius: 20px; max-height: 80%; } }
+
 /* ---------- map pins ---------- */
 .pin {
   border: 0; padding: 3px 9px 3px 3px; border-radius: 999px; background: var(--bg); color: var(--fg);
@@ -219,8 +247,19 @@ button { cursor: pointer; }
     </button>
   </div>
   <div class="chips" id="cats" role="group" aria-label="Категории"></div>
-  <div class="chips" id="subs" role="group" aria-label="Виды" hidden></div>
 </header>
+
+<div class="picker-backdrop" id="picker" hidden>
+  <div class="picker" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+    <div class="picker-head"><h2 id="picker-title">Категории</h2><button class="link-btn" id="picker-close">Закрыть</button></div>
+    <label class="search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="picker-q" type="search" placeholder="Найти вид: падел, керамика…" autocomplete="off">
+    </label>
+    <div class="picker-list" id="picker-list"></div>
+    <div class="picker-foot"><button class="btn ghost" id="picker-reset">Сбросить</button><button class="btn primary" id="picker-apply">Показать</button></div>
+  </div>
+</div>
 
 <section class="sheet" id="sheet" aria-label="События">
   <div class="grab" id="grab"><div class="handle"></div></div>
@@ -236,29 +275,47 @@ button { cursor: pointer; }
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
 // ---------- справочники ----------
+// категории и виды — по docs/10-categories.md
 const CATS = {
-  sport:    { name: 'Спорт',       color: '#e8590c' },
-  dance:    { name: 'Танцы',       color: '#d6336c' },
-  creative: { name: 'Творчество',  color: '#7048e8' },
-  games:    { name: 'Игры',        color: '#1971c2' },
-  culture:  { name: 'Культура',    color: '#0c8599' },
-  learn:    { name: 'Обучение',    color: '#e8a400' },
-  food:     { name: 'Еда',         color: '#e03131' },
-  outdoor:  { name: 'За городом',  color: '#2f9e44' },
+  sport:    { name: 'Спорт',            color: '#e8590c', icon: '🏅' },
+  body:     { name: 'Тело и практики',  color: '#c2255c', icon: '🧘' },
+  dance:    { name: 'Танцы',            color: '#e64980', icon: '💃' },
+  creative: { name: 'Творчество',       color: '#7048e8', icon: '🎨' },
+  games:    { name: 'Игры',             color: '#1971c2', icon: '🎲' },
+  culture:  { name: 'Культура',         color: '#0c8599', icon: '🎭' },
+  learn:    { name: 'Обучение',         color: '#e8a400', icon: '🎓' },
+  social:   { name: 'Общение',          color: '#4263eb', icon: '💬' },
+  food:     { name: 'Еда и напитки',    color: '#e03131', icon: '🍽️' },
+  outdoor:  { name: 'На природе',       color: '#2f9e44', icon: '🌲' },
 };
 const SUBS = {
-  volleyball: ['sport', 'Волейбол', '🏐'], football: ['sport', 'Футбол', '⚽'], basketball: ['sport', 'Баскетбол', '🏀'],
-  running: ['sport', 'Бег', '🏃'], yoga: ['sport', 'Йога', '🧘'], tennis: ['sport', 'Теннис и падел', '🎾'],
-  climbing: ['sport', 'Скалолазание', '🧗'], cycling: ['sport', 'Велозаезды', '🚴'],
-  salsa: ['dance', 'Сальса и бачата', '💃'], hiphop: ['dance', 'Хип-хоп', '🕺'], tango: ['dance', 'Танго', '🌹'],
-  ceramics: ['creative', 'Керамика', '🏺'], painting: ['creative', 'Рисование', '🎨'], photo: ['creative', 'Фотопрогулки', '📷'],
-  board: ['games', 'Настолки', '🎲'], quiz: ['games', 'Квизы', '❓'], mafia: ['games', 'Мафия', '🕵️'], dnd: ['games', 'Ролевые', '🐉'],
-  theatre: ['culture', 'Театр и импров', '🎭'], cinema: ['culture', 'Кино', '🎬'], concert: ['culture', 'Концерты', '🎸'],
-  tour: ['culture', 'Экскурсии', '🏛️'], exhibition: ['culture', 'Выставки', '🖼️'],
-  lecture: ['learn', 'Лекции', '🎓'], language: ['learn', 'Языковые клубы', '🗣️'],
-  cooking: ['food', 'Кулинарные МК', '🍝'], tasting: ['food', 'Дегустации', '🧀'], brunch: ['food', 'Бранчи и ужины', '🥐'],
-  hiking: ['outdoor', 'Походы', '🥾'], sup: ['outdoor', 'Сапы и каяки', '🛶'],
+  volleyball: ['sport', 'Волейбол', '🏐'], beachvolley: ['sport', 'Пляжный волейбол', '🏖️'], football: ['sport', 'Футбол', '⚽'],
+  basketball: ['sport', 'Баскетбол', '🏀'], hockey: ['sport', 'Хоккей', '🏒'], tennis: ['sport', 'Теннис', '🎾'],
+  padel: ['sport', 'Падел', '🎾'], tabletennis: ['sport', 'Настольный теннис', '🏓'], badminton: ['sport', 'Бадминтон', '🏸'],
+  running: ['sport', 'Бег', '🏃'], cycling: ['sport', 'Велозаезды', '🚴'], swimming: ['sport', 'Плавание', '🏊'],
+  climbing: ['sport', 'Скалолазание', '🧗'], martial: ['sport', 'Единоборства', '🥋'], functional: ['sport', 'Функциональный тренинг', '🏋️'],
+  skiing: ['sport', 'Лыжи и коньки', '⛸️'],
+  yoga: ['body', 'Йога', '🧘'], pilates: ['body', 'Пилатес', '🤸'], stretching: ['body', 'Растяжка', '🙆'],
+  meditation: ['body', 'Медитация', '🪷'], breathing: ['body', 'Дыхательные практики', '🌬️'],
+  salsa: ['dance', 'Сальса', '💃'], bachata: ['dance', 'Бачата', '💃'], kizomba: ['dance', 'Кизомба', '💃'], tango: ['dance', 'Танго', '🌹'],
+  swing: ['dance', 'Свинг и линди-хоп', '🎷'], hiphop: ['dance', 'Хип-хоп', '🕺'], contemporary: ['dance', 'Контемпорари', '🩰'], hustle: ['dance', 'Хастл', '🕺'],
+  ceramics: ['creative', 'Керамика', '🏺'], painting: ['creative', 'Рисование', '🎨'], craft: ['creative', 'Рукоделие и шитьё', '🧶'],
+  woodwork: ['creative', 'Столярное дело', '🪚'], photo: ['creative', 'Фотопрогулки', '📷'], music: ['creative', 'Музыка', '🎸'],
+  vocal: ['creative', 'Вокал', '🎤'], calligraphy: ['creative', 'Каллиграфия', '✒️'],
+  board: ['games', 'Настольные игры', '🎲'], mafia: ['games', 'Мафия', '🕵️'], quiz: ['games', 'Квизы', '❓'],
+  dnd: ['games', 'Ролевые игры', '🐉'], chess: ['games', 'Шахматы', '♟️'], esports: ['games', 'Видеоигры', '🎮'],
+  theatre: ['culture', 'Театр', '🎭'], impro: ['culture', 'Импровизация', '🎭'], standup: ['culture', 'Стендап', '🎙️'],
+  cinema: ['culture', 'Кино и киноклубы', '🎬'], concert: ['culture', 'Концерты', '🎵'], kvartirnik: ['culture', 'Квартирники', '🕯️'],
+  exhibition: ['culture', 'Выставки', '🖼️'], tour: ['culture', 'Экскурсии', '🏛️'],
+  lecture: ['learn', 'Лекции', '🎓'], workshop: ['learn', 'Мастер-классы и воркшопы', '🛠️'], course: ['learn', 'Курсы', '📚'],
+  language: ['social', 'Языковые клубы', '🗣️'], bookclub: ['social', 'Книжные клубы', '📖'], debate: ['social', 'Дискуссии и дебаты', '💬'],
+  networking: ['social', 'Нетворкинг', '🤝'], community: ['social', 'Встречи по интересам', '🧩'],
+  cooking: ['food', 'Кулинарные мастер-классы', '🍝'], tasting: ['food', 'Дегустации', '🧀'], gastrodinner: ['food', 'Гастроужины', '🍷'],
+  brunch: ['food', 'Бранчи', '🥐'],
+  hiking: ['outdoor', 'Походы', '🥾'], sup: ['outdoor', 'Сапы и каяки', '🛶'], bikehike: ['outdoor', 'Велопоходы', '🚵'],
+  rafting: ['outdoor', 'Сплавы', '🚣'], trip: ['outdoor', 'Выезды за город', '🚐'],
 };
+const subsOf = cat => Object.keys(SUBS).filter(k => SUBS[k][0] === cat);
 const CITY = { msk: { center: [37.615, 55.752], zoom: 11 }, spb: { center: [30.315, 59.94], zoom: 11.3 } };
 
 // ---------- организаторы (вымышленные) ----------
@@ -303,7 +360,7 @@ const REVIEWS = {
 // ---------- события: [id, город, вид, название, lat, lng, через N дней, время, длительность мин, цена, мест, занято, место, организатор, описание]
 const RAW = [
   ['m1','msk','volleyball','Волейбол для среднего уровня',55.7158,37.5537,0,'19:00',120,600,12,9,'Лужники, зал «Дружба»','o1','Играем 6×6, ротация команд каждые 15 минут. Нужно уверенно принимать и подавать. Мячи и манишки есть.'],
-  ['m2','msk','volleyball','Пляжный волейбол под крышей',55.7929,37.6772,2,'20:00',120,900,12,5,'Сокольники, крытый пляж','o1','Тёплый песок в октябре. 2×2 и 4×4, уровень любой, разделим по силам.'],
+  ['m2','msk','beachvolley','Пляжный волейбол под крышей',55.7929,37.6772,2,'20:00',120,900,12,5,'Сокольники, крытый пляж','o1','Тёплый песок в октябре. 2×2 и 4×4, уровень любой, разделим по силам.'],
   ['m3','msk','volleyball','Волейбол для новичков',55.8040,37.5860,5,'18:30',90,500,14,3,'Спортзал на Дмитровской','o1','Разбираем технику: приём, передача, подача. В конце — игра. Опыт не нужен.'],
   ['m4','msk','running','Утренняя пробежка 10 км',55.7298,37.6011,6,'09:00',70,0,40,22,'Парк Горького, главный вход','o2','Три темповые группы: 5:00, 5:45 и 6:30 мин/км. После — кофе.'],
   ['m5','msk','running','Интервалы на стадионе',55.7910,37.5590,1,'19:30',75,300,25,11,'Петровский парк','o2','6×800 м с тренером. Подойдёт тем, кто уже пробегает 5 км.'],
@@ -312,8 +369,8 @@ const RAW = [
   ['m8','msk','basketball','Стритбол 3×3',55.7347,37.6061,1,'18:00',120,0,18,7,'Музеон, площадка у набережной','o13','Собираем команды на месте, играем до 11 очков.'],
   ['m9','msk','yoga','Йога на рассвете',55.7193,37.5900,6,'07:30',60,400,20,14,'Нескучный сад, ротонда','o9','Мягкая практика на свежем воздухе. Коврики есть, берите тёплую одежду.'],
   ['m10','msk','yoga','Хатха-йога для спины',55.7637,37.5929,2,'19:00',75,800,15,9,'Студия на Патриарших','o9','Для тех, кто много сидит за компьютером. Без сложных асан.'],
-  ['m11','msk','tennis','Падел: игра в парах',55.7495,37.5398,4,'08:00',90,1500,4,2,'Москва-Сити, падел-корт','o5','Ищем двоих в пару. Уровень 3.0–3.5. Ракетки можно взять в аренду.'],
-  ['m12','msk','tennis','Падел для начинающих',55.8263,37.6377,7,'11:00',90,1800,8,3,'ВДНХ, падел-центр','o5','Первое знакомство: хват, удары у стенки, правила. Ракетки включены.'],
+  ['m11','msk','padel','Падел: игра в парах',55.7495,37.5398,4,'08:00',90,1500,4,2,'Москва-Сити, падел-корт','o5','Ищем двоих в пару. Уровень 3.0–3.5. Ракетки можно взять в аренду.'],
+  ['m12','msk','padel','Падел для начинающих',55.8263,37.6377,7,'11:00',90,1800,8,3,'ВДНХ, падел-центр','o5','Первое знакомство: хват, удары у стенки, правила. Ракетки включены.'],
   ['m13','msk','climbing','Боулдеринг-вечер',55.7520,37.6680,3,'19:00',120,900,10,4,'Скалодром у Курской','o5','Инструктаж для новичков, трассы разной сложности. Скальники в прокате.'],
   ['m14','msk','cycling','Велозаезд по набережным',55.7106,37.5590,6,'10:00',150,0,30,17,'Воробьёвы горы, смотровая','o2','35 км в спокойном темпе. Нужен свой велосипед или прокат.'],
   ['m15','msk','salsa','Сальса-вечеринка + урок',55.7570,37.6370,0,'20:00',180,700,40,26,'Китай-город, танцевальный зал','o6','Первый час — урок для новичков, потом вечеринка. Пара не нужна.'],
@@ -327,7 +384,7 @@ const RAW = [
   ['m23','msk','mafia','Мафия с ведущим',55.7700,37.6850,1,'19:30',180,600,12,8,'Бауманская, лофт','o4','Классическая мафия, 3–4 партии за вечер. Новичкам объясним всё.'],
   ['m24','msk','dnd','D&D: ваншот для новичков',55.7600,37.6500,5,'17:00',240,900,5,3,'Покровка, игровая комната','o4','Готовые персонажи, кубики дадим. Мастер со стажем 8 лет.'],
   ['m25','msk','quiz','Квиз: кино и сериалы',55.7615,37.6185,2,'20:00',150,600,72,50,'Лубянка, бар «Восьмёрка»','o8','Команды до 8 человек. Можно прийти одному — соберём команду.'],
-  ['m26','msk','theatre','Импровизация: шоу и мастер-класс',55.7690,37.5970,4,'19:00',120,1200,30,21,'Малая Бронная, сцена','o14','Час шоу, час — пробуете сами. Выходить на сцену не обязательно.'],
+  ['m26','msk','impro','Импровизация: шоу и мастер-класс',55.7690,37.5970,4,'19:00',120,1200,30,21,'Малая Бронная, сцена','o14','Час шоу, час — пробуете сами. Выходить на сцену не обязательно.'],
   ['m27','msk','tour','Тайные дворы Китай-города',55.7540,37.6330,6,'13:00',120,900,15,11,'м. Китай-город, выход 9','o7','Палаты, подворья и дворы, куда не водят обычные экскурсии.'],
   ['m28','msk','tour','Зарядье и вид с крыши',55.7512,37.6286,3,'17:00',90,1200,12,12,'Парк Зарядье, вход с Варварки','o7','История района и закат на смотровой.'],
   ['m29','msk','lecture','Лекция: как устроен мозг',55.7900,37.5980,1,'19:30',90,500,60,34,'Савёловская, лекторий','o12','Нейробиолог о памяти, сне и привычках. Без формул.'],
@@ -336,16 +393,16 @@ const RAW = [
   ['m32','msk','tasting','Дегустация сыров',55.7575,37.6655,5,'19:00',120,2800,14,10,'Курская, сырная лавка','o11','8 сыров из России и Европы, сомелье расскажет, с чем их есть.'],
   ['m33','msk','hiking','Поход: Звенигород, 15 км',55.7290,36.8580,6,'08:30',600,1500,20,13,'Сбор у электрички, Белорусский вокзал','o10','Лесом вдоль Москвы-реки, обед у костра. Трансфер не включён.'],
   ['m34','msk','sup','Сапы по Москве-реке',55.7820,37.4250,6,'11:00',120,1800,12,8,'Серебряный бор','o10','Гидрокостюмы и доски включены. Инструктаж перед стартом.'],
-  ['m35','msk','concert','Квартирник: акустика',55.7690,37.6380,4,'20:00',150,1000,25,18,'Сретенка, квартира-студия','o14','Три исполнителя, свечи, чай. Точный адрес — после брони.'],
+  ['m35','msk','kvartirnik','Квартирник: акустика',55.7690,37.6380,4,'20:00',150,1000,25,18,'Сретенка, квартира-студия','o14','Три исполнителя, свечи, чай. Точный адрес — после брони.'],
   ['m36','msk','exhibition','Выставка + разговор с художником',55.7545,37.6610,2,'18:00',90,0,40,18,'Винзавод, галерея','o12','Экскурсия по выставке и вопросы автору.'],
   ['m37','msk','cinema','Киноклуб: Тарковский',55.7410,37.6550,3,'19:30',180,400,30,14,'Таганка, кинозал','o12','Смотрим «Зеркало», потом обсуждаем.'],
-  ['m38','msk','brunch','Бранч с незнакомцами',55.7645,37.5950,6,'12:00',120,1500,8,5,'Патриаршие, ресторан','o11','Один длинный стол, 8 человек, которые хотят познакомиться.'],
+  ['m38','msk','bookclub','Книжный клуб: «Мастер и Маргарита»',55.7645,37.5950,6,'12:00',120,500,12,7,'Патриаршие, кофейня','o12','Обсуждаем роман там, где он начинается. Можно прийти, даже если не дочитали.'],
   ['s1','spb','volleyball','Волейбол на Крестовском',59.9719,30.2469,1,'19:00',120,550,12,8,'Крестовский остров, спортзал','o15','Средний и выше. Играем 6×6, две площадки.'],
   ['s2','spb','running','Пробежка по набережным',59.9460,30.3720,6,'09:00',60,0,30,12,'Таврический сад, вход с Кирочной','o2','8 км, темп 6:00. После — кофе на Чернышевской.'],
   ['s3','spb','board','Настолки на Рубинштейна',59.9300,30.3460,0,'18:00',240,350,20,9,'Рубинштейна, антикафе','o4','Новинки и классика, ведущий поможет с правилами.'],
   ['s4','spb','ceramics','Керамика в Новой Голландии',59.9290,30.2890,2,'12:00',150,2400,8,5,'Новая Голландия','o3','Гончарный круг для новичков.'],
   ['s5','spb','tour','Дворы-колодцы Петербурга',59.9257,30.3200,6,'14:00',120,800,15,9,'м. Сенная площадь','o7','Достоевский, дворы и парадные.'],
-  ['s6','spb','salsa','Бачата-вечер на Севкабеле',59.9240,30.2400,4,'20:00',180,600,40,17,'Севкабель Порт','o6','Урок + social. Можно без пары.'],
+  ['s6','spb','bachata','Бачата-вечер на Севкабеле',59.9240,30.2400,4,'20:00',180,600,40,17,'Севкабель Порт','o6','Урок + social. Можно без пары.'],
   ['s7','spb','sup','Сапы по каналам',59.9330,30.3000,3,'12:00',150,2200,10,6,'Набережная Мойки','o10','Мойка, Фонтанка и Крюков канал.'],
   ['s8','spb','quiz','Квиз: Петербург',59.9220,30.3560,2,'19:30',150,550,60,33,'Лофт на Лиговском','o8','Всё о городе: от мостов до шавермы.'],
   ['s9','spb','yoga','Йога на Елагином',59.9790,30.2660,6,'10:00',75,0,25,10,'Елагин остров, у дворца','o9','Мягкая практика, коврики есть.'],
@@ -386,11 +443,10 @@ const ICON = {
 };
 
 // ---------- состояние ----------
-const state = { city: 'msk', cat: null, subs: new Set(), date: 'all', price: 'all', freeOnly: false, q: '', view: 'list', active: null, picking: false, draft: null };
+const state = { city: 'msk', subs: new Set(), date: 'all', price: 'all', freeOnly: false, q: '', view: 'list', active: null, picking: false, draft: null };
 
 function matches(ev) {
   if (ev.city !== state.city) return false;
-  if (state.cat && ev.cat !== state.cat) return false;
   if (state.subs.size && !state.subs.has(ev.sub)) return false;
   if (state.date === 'today' && ev.off !== 0) return false;
   if (state.date === 'tomorrow' && ev.off !== 1) return false;
@@ -445,30 +501,83 @@ map.on('click', e => {
 });
 
 // ---------- фильтры сверху ----------
-function renderCats() {
-  const all = `<button class="chip" aria-pressed="${!state.cat}" data-cat="">Все</button>`;
-  $('#cats').innerHTML = all + Object.entries(CATS).map(([k, c]) =>
-    `<button class="chip" style="--c:${c.color}" aria-pressed="${state.cat === k}" data-cat="${k}"><span class="dot"></span>${c.name}</button>`).join('');
-  const subs = $('#subs');
-  subs.hidden = !state.cat;
-  if (state.cat) {
-    subs.innerHTML = Object.entries(SUBS).filter(([, s]) => s[0] === state.cat).map(([k, s]) =>
-      `<button class="chip sub" aria-pressed="${state.subs.has(k)}" data-sub="${k}">${s[2]} ${s[1]}</button>`).join('');
+// Чипсы выбранного: вся категория целиком — одним чипсом, иначе — по чипсу на вид
+function selectionChips(sel) {
+  const chips = [];
+  for (const [ck, c] of Object.entries(CATS)) {
+    const all = subsOf(ck), picked = all.filter(k => sel.has(k));
+    if (!picked.length) continue;
+    if (picked.length === all.length) chips.push({ key: 'cat:' + ck, color: c.color, label: `${c.icon} ${c.name}` });
+    else picked.forEach(k => chips.push({ key: 'sub:' + k, color: c.color, label: `${SUBS[k][2]} ${SUBS[k][1]}` }));
   }
+  return chips;
+}
+const FILTER_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>';
+function renderCats() {
+  const chips = selectionChips(state.subs);
+  $('#cats').innerHTML =
+    `<button class="chip filter-btn" id="open-picker" aria-haspopup="dialog">${FILTER_ICON} Категории${chips.length ? ` <span class="count">${chips.length}</span>` : ''}</button>` +
+    chips.map(ch => `<button class="chip" style="--c:${ch.color}" aria-pressed="true" data-remove="${ch.key}" aria-label="Убрать ${esc(ch.label)}">${ch.label}<span class="x">✕</span></button>`).join('');
   syncTopbarHeight();
 }
 $('#cats').addEventListener('click', e => {
-  const b = e.target.closest('[data-cat]'); if (!b) return;
-  state.cat = b.dataset.cat === state.cat ? null : (b.dataset.cat || null);
-  state.subs.clear();
+  if (e.target.closest('#open-picker')) return openPicker();
+  const b = e.target.closest('[data-remove]'); if (!b) return;
+  const [kind, k] = b.dataset.remove.split(':');
+  if (kind === 'cat') subsOf(k).forEach(s => state.subs.delete(s)); else state.subs.delete(k);
   renderCats(); refresh();
 });
-$('#subs').addEventListener('click', e => {
-  const b = e.target.closest('[data-sub]'); if (!b) return;
-  const k = b.dataset.sub;
-  state.subs.has(k) ? state.subs.delete(k) : state.subs.add(k);
-  renderCats(); refresh();
+
+// ---------- выбор категорий ----------
+let draft = new Set(), expanded = new Set(), pickerQ = '';
+function openPicker() {
+  draft = new Set(state.subs); pickerQ = ''; $('#picker-q').value = '';
+  expanded = new Set(Object.keys(CATS).filter(ck => subsOf(ck).some(k => draft.has(k) && !subsOf(ck).every(s => draft.has(s)))));
+  $('#picker').hidden = false; renderPicker();
+}
+function closePicker() { $('#picker').hidden = true; }
+function renderPicker() {
+  const cityEvents = EVENTS.filter(e => e.city === state.city);
+  const cnt = k => cityEvents.filter(e => e.sub === k).length;
+  let html = '';
+  for (const [ck, c] of Object.entries(CATS)) {
+    const all = subsOf(ck);
+    const catMatch = !pickerQ || c.name.toLowerCase().includes(pickerQ);
+    const shown = catMatch ? all : all.filter(k => SUBS[k][1].toLowerCase().includes(pickerQ));
+    if (!shown.length) continue;
+    const n = all.filter(k => draft.has(k)).length;
+    const st = n === 0 ? '' : n === all.length ? 'on' : 'some';
+    const open = expanded.has(ck) || (pickerQ && !catMatch);
+    const total = all.reduce((s, k) => s + cnt(k), 0);
+    const note = n === all.length ? 'Все виды' : n ? `Выбрано ${n} из ${all.length}` : `${total} ${plural(total, 'событие', 'события', 'событий')}`;
+    html += `<div class="cat-row" style="--c:${c.color}">
+        <button class="cat-main" data-expand="${ck}" aria-expanded="${!!open}"><span class="cat-ico">${c.icon}</span><span><b>${c.name}</b><small>${note}</small></span><span class="chev">›</span></button>
+        <button class="check ${st}" data-cat-toggle="${ck}" aria-label="Выбрать всю категорию «${c.name}»" aria-pressed="${st === 'on'}">${st === 'on' ? '✓' : st === 'some' ? '–' : ''}</button>
+      </div>` +
+      (open ? `<div class="sub-list">${shown.map(k => `<button class="sub-row" data-sub-toggle="${k}" aria-pressed="${draft.has(k)}">
+        <span>${SUBS[k][2]}</span><span>${SUBS[k][1]}</span><small>${cnt(k) || ''}</small><span class="check ${draft.has(k) ? 'on' : ''}">${draft.has(k) ? '✓' : ''}</span></button>`).join('')}</div>` : '');
+  }
+  $('#picker-list').innerHTML = html || '<div class="empty"><b>Такого вида пока нет</b>Организатор может предложить новый вид через поддержку.</div>';
+  const saved = state.subs; state.subs = draft;
+  const total = EVENTS.filter(matches).length;
+  state.subs = saved;
+  $('#picker-apply').textContent = total ? `Показать ${total} ${plural(total, 'событие', 'события', 'событий')}` : 'Ничего не найдено';
+  $('#picker-apply').disabled = !total;
+}
+$('#picker-list').addEventListener('click', e => {
+  const ex = e.target.closest('[data-expand]');
+  if (ex) { const k = ex.dataset.expand; expanded.has(k) ? expanded.delete(k) : expanded.add(k); return renderPicker(); }
+  const ct = e.target.closest('[data-cat-toggle]');
+  if (ct) { const all = subsOf(ct.dataset.catToggle); const full = all.every(k => draft.has(k)); all.forEach(k => full ? draft.delete(k) : draft.add(k)); return renderPicker(); }
+  const st = e.target.closest('[data-sub-toggle]');
+  if (st) { const k = st.dataset.subToggle; draft.has(k) ? draft.delete(k) : draft.add(k); return renderPicker(); }
 });
+$('#picker-q').addEventListener('input', e => { pickerQ = e.target.value.trim().toLowerCase(); renderPicker(); });
+$('#picker-reset').onclick = () => { draft.clear(); renderPicker(); };
+$('#picker-apply').onclick = () => { state.subs = new Set(draft); closePicker(); renderCats(); refresh(); fitAll(); };
+$('#picker-close').onclick = closePicker;
+$('#picker').addEventListener('click', e => { if (e.target.id === 'picker') closePicker(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#picker').hidden) closePicker(); });
 $('#q').addEventListener('input', e => { state.q = e.target.value.trim().toLowerCase(); refresh(); });
 function setCity(c) {
   state.city = c;
