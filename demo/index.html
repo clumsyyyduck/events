@@ -597,18 +597,32 @@ function setCity(c) {
 $('#q').placeholder = `Поиск ${CITY[state.city].where}`;
 
 // ---------- настройки ----------
+const SETTINGS_ROWS = [
+  ['history', 'История посещений'], ['questions', 'Мои вопросы'], ['organizer', 'Я организатор'],
+  ['notifications', 'Уведомления'], ['support', 'Поддержка'], ['docs', 'Документы'], ['logout', 'Выйти'],
+];
 function renderSettings() {
   state.view = 'settings'; state.active = null; updatePins();
   $('#view').innerHTML = `<button class="back" id="back-settings">‹ Все события</button>
     <div class="list-head"><h2>Настройки</h2></div>
+    <div class="org" style="margin-top:14px">
+      <div class="avatar">ВЫ</div>
+      <div><div class="org-name">Ваше имя</div><div class="org-stats">+7 ••• ••• 12 34 · Изменить профиль</div></div>
+    </div>
     <div class="section-title">Город</div>
     ${Object.entries(CITY).map(([k, c]) => `<button class="radio-row" data-city="${k}" aria-pressed="${state.city === k}">
       <span>${c.title}</span><span class="check ${state.city === k ? 'on' : ''}">${state.city === k ? '✓' : ''}</span></button>`).join('')}
-    <p class="note">При первом входе город определяется по геопозиции. На карте и в списке — только события выбранного города.</p>`;
+    <p class="note">При первом входе город определяется по геопозиции. На карте и в списке — только события выбранного города.</p>
+    <div class="section-title">Аккаунт</div>
+    ${SETTINGS_ROWS.map(([k, t]) => `<button class="radio-row" data-setting="${k}"><span>${t}</span><span class="muted">›</span></button>`).join('')}
+    <button class="radio-row" data-setting="delete" style="color:var(--warn)"><span>Удалить аккаунт</span></button>`;
 }
 $('#btn-settings').onclick = () => { renderSettings(); if (!isDesktop()) setSheet('half'); };
 $('#view').addEventListener('click', e => {
-  const b = e.target.closest('[data-city]'); if (!b || state.view !== 'settings') return;
+  if (state.view !== 'settings') return;
+  const s = e.target.closest('[data-setting]');
+  if (s) return s.dataset.setting === 'history' ? renderMine() : toast('В демо этот раздел пока не работает');
+  const b = e.target.closest('[data-city]'); if (!b) return;
   if (b.dataset.city !== state.city) { setCity(b.dataset.city); toast(`Город: ${CITY[state.city].title}`); }
   renderSettings();
 });
@@ -810,7 +824,25 @@ function updateBadge() {
   const n = Object.keys(bookings).length;
   $('#mine-badge').hidden = !n; $('#mine-badge').textContent = n;
 }
-$('#btn-mine').onclick = () => {
+// посещённые события (архив) — пример
+const HISTORY = [
+  { sub: 'volleyball', title: 'Волейбол для среднего уровня', org: 'o1', ago: 7, place: 'Лужники, зал «Дружба»', review: 5 },
+  { sub: 'ceramics', title: 'Гончарный круг: первая чашка', org: 'o3', ago: 12, place: 'Винзавод, мастерская', review: 0 },
+  { sub: 'quiz', title: 'Квиз: музыка 2000-х', org: 'o8', ago: 21, place: 'Лубянка, бар «Восьмёрка»', review: 4 },
+];
+function historyHTML() {
+  return HISTORY.map((h, i) => `<div class="card" style="--c:${CATS[SUBS[h.sub][0]].color};cursor:default">
+    <span class="ico">${SUBS[h.sub][2]}</span>
+    <span style="min-width:0"><h3>${esc(h.title)}</h3>
+      <div class="meta">${dateOf(-h.ago).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })} · ${esc(h.place)}</div>
+      <div class="meta">${esc(ORGS[h.org].name)}</div></span>
+    <span>${h.review ? `<div class="stars" style="font-size:13px">${'★'.repeat(h.review)}</div><div class="spots none">ваш отзыв</div>`
+      : `<button class="btn ghost" style="padding:7px 10px;font-size:13px" data-review="${i}">Оставить отзыв</button>`}</span>
+  </div>`).join('');
+}
+$('#view').addEventListener('click', e => { if (e.target.closest('[data-review]')) toast('В рабочей версии откроется форма отзыва'); });
+$('#btn-mine').onclick = () => renderMine();
+function renderMine() {
   state.view = 'mine'; state.active = null; updatePins();
   const booked = EVENTS.filter(e => bookings[e.id]).sort((a, b) => a.off - b.off);
   const mine = EVENTS.filter(e => e.org === 'me');
@@ -818,9 +850,11 @@ $('#btn-mine').onclick = () => {
     <div class="list-head"><h2>Мои записи</h2></div>
     ${booked.length ? booked.map(cardHTML).join('') : '<div class="empty"><b>Пока нет записей</b>Выберите событие на карте и нажмите «Забронировать».</div>'}
     <div class="list-head" style="margin-top:18px"><h2>Я организую</h2></div>
-    ${mine.length ? mine.map(cardHTML).join('') : '<div class="empty"><b>Вы ещё ничего не создали</b>Нажмите «+» вверху, чтобы собрать людей на своё событие.</div>'}`;
+    ${mine.length ? mine.map(cardHTML).join('') : '<div class="empty"><b>Вы ещё ничего не создали</b>Нажмите «+» вверху, чтобы собрать людей на своё событие.</div>'}
+    <div class="list-head" style="margin-top:18px"><h2>История</h2><span class="muted">${HISTORY.length} ${plural(HISTORY.length, 'событие', 'события', 'событий')}</span></div>
+    ${historyHTML()}`;
   if (!isDesktop()) setSheet('full');
-};
+}
 
 // ---------- создание события ----------
 $('#btn-create').onclick = () => {
